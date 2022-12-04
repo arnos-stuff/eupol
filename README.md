@@ -8,9 +8,11 @@ The basic utils are displayed in the [example notebook][2]. If you do not have a
 
 The NUTS data can be easily visualized using the [GeoPandas][3] and [Folium][4] dependencies.
 
-This is a sample map of every NUTS region in the EU: 
+This is a sample map of every NUTS region in the EU: [NUTS map][5]
 
-![NUTS Map][5]
+Here's a sneak peek
+
+![NUTS Map][6]
 
 # Notebook Example
 
@@ -21,3 +23,4 @@ This is a sample map of every NUTS region in the EU:
 [3]:https://geopandas.org/
 [4]:https://python-visualization.github.io/folium/
 [5]:assets/images/nuts.html
+[6]:assets/images/nuts.svg
