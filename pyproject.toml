@@ -19,6 +19,7 @@ tqdm = "^4.64.1"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.17.1"
+notebook = "^6.5.2"
 
 [build-system]
 requires = ["poetry-core"]
