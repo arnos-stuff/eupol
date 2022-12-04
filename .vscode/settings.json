@@ -1,0 +1,28 @@
+{
+    "jupyter.kernels.filter": [
+        {
+            "path": "/home/arnov/.local/share/virtualenvs/beschool-K4kWFdYk/bin/python",
+            "type": "pythonEnvironment"
+        },
+        {
+            "path": "/usr/bin/python2",
+            "type": "pythonEnvironment"
+        },
+        {
+            "path": "/bin/python2",
+            "type": "pythonEnvironment"
+        },
+        {
+            "path": "/bin/python3.10",
+            "type": "pythonEnvironment"
+        },
+        {
+            "path": "/usr/bin/python3.10",
+            "type": "pythonEnvironment"
+        },
+        {
+            "path": "/usr/bin/python",
+            "type": "pythonEnvironment"
+        }
+    ]
+}
