@@ -14,10 +14,6 @@ Here's a sneak peek
 
 ![NUTS Map][6]
 
-# Notebook Example
-
-![Notebook Example][2]
-
 [1]:https://ec.europa.eu/eurostat/web/gisco/geodata/reference-data/administrative-units-statistical-units/nuts#nuts21
 [2]:assets/images/nuts-notebook.html
 [3]:https://geopandas.org/
