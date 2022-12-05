@@ -15,12 +15,14 @@ pyarrow = "^10.0.1"
 fastparquet = "^2022.11.0"
 rich = "^12.6.0"
 tqdm = "^4.64.1"
+eurostat = "^1.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.17.1"
 notebook = "^6.5.2"
 nbconvert = "^7.2.5"
+pytest = "^7.2.0"
 
 [build-system]
 requires = ["poetry-core"]
