@@ -1,13 +1,21 @@
-import requests
-import json
+import rich.progress as rprog
 import xmltodict as xtd
 import pandas as pd
-import rich.progress as rprog
-from rich.progress_bar import ProgressBar
+import requests
+import tempfile
+import pickle
+import json
+import os
 
 from typing import Union, Optional, List, Dict, Any, Tuple, Callable
+from rich.progress_bar import ProgressBar
+from hashlib import sha512 as sha
+from rich import print as rprint
+from rich.tree import Tree
 
-from eupol.download.utils import tmpcache, rmcache, rc
+
+
+from eupol.download.utils import tmpcache, rmcache, rc, rlog
 from eupol.download.paths import data_dir
 
 def to_snake_case(funcname: str) -> str:
@@ -460,6 +468,69 @@ class TableOfContents(sdmxBase):
         cls.df = toc
         return cls
 
+    @classmethod
+    def from_parquet(cls, path: str):
+        cls.toc = pd.read_parquet(path)
+        return cls
+    
+    @classmethod
+    def toc_tree(cls, table: Optional[pd.DataFrame] = None):
+        """Create a tree of the table of contents at the current state of the class"""
+        
+        styles = {
+            'category_scheme.name': "bold purple",
+            'category_scheme.level1.name' : "bold blue",
+            'category_scheme.level2.name' : "bold green",
+            'category_scheme.level3.name' : "bold yellow",
+            'category_scheme.level4.name' : "blue",
+            'category_scheme.level5.name' : "green",
+            'category_scheme.level6.name' : "yellow",
+            'dataflow.name' : "bold red",
+        }
+
+        toc = cls.toc if not table else table    
+        tocnames = [col for col in toc.columns if "name" in col]
+        # capture snapshot of current df through hash
+        filename = "toc-snapshot-"
+        for col in tocnames:
+            filename += f"@col={col}@values{'-'.join(toc[col].dropna().unique())}"
+        filename = sha(filename.encode()).hexdigest() + ".pkl"
+        filename = os.path.join(tempfile.gettempdir(), "eupol", "sdmx", filename)
+        # check if snapshot exists
+        if os.path.exists(filename):
+            with open(filename, "rb") as f:
+                cls.tree = pickle.load(f)
+            return cls.tree
+        # create tree
+        cls.tree = Tree("Table of Contents Topics", style="bold blue")
+        nodes = {
+            "categories": {
+                "visited": {
+                    col : [] for col in tocnames
+                }
+            },
+        }
+        for idx, row in toc.iterrows():
+            rootname = tocnames[0]
+            if row[rootname] not in nodes["categories"]["visited"][rootname]:
+                nodes["categories"][row[rootname]] = cls.tree.add(row[rootname], style=styles[rootname])
+                nodes["categories"]["visited"][rootname].append(row[rootname])
+                root = nodes["categories"][row[rootname]]
+            else:
+                root = nodes["categories"][row[rootname]]
+            for col in tocnames[1:]:
+                if row[col] is not None:
+                    if row[col] not in nodes["categories"]["visited"][col]:
+                        nodes["categories"][row[col]] = root.add(row[col], style=styles[col])
+                        nodes["categories"]["visited"][col].append(row[col])
+                    root = nodes["categories"][row[col]]
+
+        # save tree
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, "wb+") as f:
+            pickle.dump(cls.tree, f)
+        return cls.tree
+
 class Model:
     def __new__(cls, agency_id: str, *args, **kwargs):
         cls.base = sdmxBase
@@ -468,24 +539,34 @@ class Model:
         cls.descendants = Descendants(agency_id)
         cls.categories = Categorisation(agency_id)
         cls.categoryscheme = CategoryScheme(agency_id)
-        cls.toc = None
+        cls.ftoc = None
 
         cls.agency_id = agency_id
         # store the agency_id in the class
         return cls
     
     @classmethod
-    @tmpcache
-    def init(cls):
+    def init(cls, directory: Optional[str] = None):
+        if directory is None:
+            tmp = tempfile.gettempdir()
+            directory = os.path.join(tmp, "eupol", "sdmx", cls.agency_id, "metadata", "TOC")
+            os.makedirs(directory, exist_ok=True)
+        cls.directory = directory
+        filename = os.path.join(directory, f"{cls.agency_id}_toc.parquet")
+        if os.path.exists(filename):
+            cls.ftoc = TableOfContents.from_parquet(filename)
+            cls.toc = cls.ftoc.toc
+            return cls.toc
+        # else download the data
         progress = rprog.Progress(
         rprog.SpinnerColumn(),
         rprog.BarColumn(),
         rprog.TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
-        rprog.TextColumn("Completed: {task.completed} / {task.total}"),
         rprog.TextColumn("{task.description}"),
         rprog.TimeElapsedColumn(),
         console=rc,
         )
+
         with progress:
             general = progress.add_task(f"> 🚀🚀 Initializing Metadata for agency {cls.agency_id}", total = 4)
             flowtask = progress.add_task(description=f"[purple] >> ƒ() ⟶  Downloading DataFlow metadata from agency {cls.agency_id}", total=None)
@@ -502,14 +583,17 @@ class Model:
             progress.update(general, advance=1)
             toc = progress.add_task(description=f"[purple] >> ƒ() ⟶ Building Table of Contents from agency {cls.agency_id}", total=None)
 
-            cls.toc = TableOfContents(
+            cls.ftoc = TableOfContents(
                 dflows,
                 dfcategories,
                 dfcatschemes,
             )
+            cls.toc = cls.ftoc.df
             progress.update(toc, advance=100, description=f"[green] >> ✅ Done ! Table of Contents built.")
             progress.update(general, advance=1)
-        return cls.toc.df
+            cls.toc.to_parquet(filename)
+            rlog(f"> 📁 ⭳⭳ saving result to {directory} as parquet (for lightning fast IO ⚡⚡)", style="blue")
+        return cls.toc
 
     @classmethod
     def rm_cache(cls):
@@ -526,6 +610,6 @@ if __name__ == '__main__':
     # dfscheme = estat.concept.df()
     # dfflow = estat.dataflow.df()
     # dfcatscheme = estat.categoryscheme.df()
-    estat.rm_cache()
+    # estat.rm_cache()
     estat.init()
-    print(estat.toc.df.head(100))
+    print(estat.toc.head(100))

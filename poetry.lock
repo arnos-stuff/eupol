@@ -281,18 +281,6 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
-name = "eurostat"
-version = "1.0.1"
-description = "Eurostat Python Package"
-category = "main"
-optional = false
-python-versions = ">=3.5"
-
-[package.dependencies]
-pandas = "*"
-requests = "*"
-
-[[package]]
 name = "exceptiongroup"
 version = "1.0.4"
 description = "Backport of PEP 654 (exception groups)"
@@ -1512,7 +1500,7 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8,<3.11"
-content-hash = "563265f73cd4b28076d33ecaabbed69eab39f1317ad694fdbfd5f58b612a9bbe"
+content-hash = "606efe20cdf23ad688df3917d3a8a07384f1f89fa1f48fc2ffc5803b8afbb6f7"
 
 [metadata.files]
 anyio = [
@@ -1768,10 +1756,6 @@ defusedxml = [
 entrypoints = [
     {file = "entrypoints-0.4-py3-none-any.whl", hash = "sha256:f174b5ff827504fd3cd97cc3f8649f3693f51538c7e4bdf3ef002c8429d42f9f"},
     {file = "entrypoints-0.4.tar.gz", hash = "sha256:b706eddaa9218a19ebcd67b56818f05bb27589b1ca9e8d797b74affad4ccacd4"},
-]
-eurostat = [
-    {file = "eurostat-1.0.1-py3-none-any.whl", hash = "sha256:db38fa602cb2015f10bc092f5455fef8287fb0dc91d098d24f863e2e0857da11"},
-    {file = "eurostat-1.0.1.tar.gz", hash = "sha256:8ddf0a4cc53cf426840bc001f9d09d851b851cbc43c02ee17419cc298ba5554e"},
 ]
 exceptiongroup = [
     {file = "exceptiongroup-1.0.4-py3-none-any.whl", hash = "sha256:542adf9dea4055530d6e1279602fa5cb11dab2395fa650b8674eaec35fc4a828"},
