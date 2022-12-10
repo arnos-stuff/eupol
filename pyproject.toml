@@ -6,7 +6,7 @@ authors = ["Arno's Stuff <bcda0276@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = ">=3.8,<3.11"
 pandas = "^1.5.2"
 folium = "^0.13.0"
 requests = "^2.28.1"
@@ -16,6 +16,9 @@ fastparquet = "^2022.11.0"
 rich = "^12.6.0"
 tqdm = "^4.64.1"
 eurostat = "^1.0.1"
+pandasdmx = "^1.9.0"
+requests-cache = "^0.9.7"
+xmltodict = "^0.13.0"
 
 
 [tool.poetry.group.dev.dependencies]

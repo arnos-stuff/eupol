@@ -1,6 +1,7 @@
 import requests
 import tempfile
 import warnings
+import inspect
 import pickle
 import json
 import gzip
@@ -137,6 +138,9 @@ def json_support(obj: Any) -> (str, Any):
     --------
     str: the name of the module that has the `to_json` and any of the 3 reading methods
     """
+    # check the simple case first
+    if is_jsonable(obj):
+        return json, "loads"
     # bring out the big guns
     mod = imp.import_module(obj.__module__)
     # try on the module first
@@ -158,14 +162,27 @@ def json_support(obj: Any) -> (str, Any):
         return None
 
 def to_gzip_json(data: Any, path: str):
-    jsonfilename = path + ".json.gz" if not path.name.endswith(".json.gz") else str(path)
+    jsonfilename = str(path) + ".json.gz" if not path.name.endswith(".json.gz") else str(path)
     with gzip.open(jsonfilename, 'wt', encoding='UTF-8') as zipfile:
         json.dump(data, zipfile)
 
 def from_gzip_json(path: str) -> Any:
-    jsonfilename = path + ".json.gz" if not path.endswith(".json.gz") else path
+    jsonfilename = str(path) + ".json.gz" if not path.endswith(".json.gz") else path
     with gzip.open(jsonfilename, 'rt', encoding='UTF-8') as zipfile:
-        return json.load(zipfile)
+        try:
+            return json.load(zipfile)
+        except json.decoder.JSONDecodeError as err:
+            rlog(f"Error: {err}", style="red")
+            rlog(f"File: {jsonfilename}", style="red")
+            rlog(zipfile.read(), style="red")
+            raise err
+
+def is_jsonable(x: Any) -> bool:
+    try:
+        json.dumps(x)
+        return True
+    except (TypeError, OverflowError) as err:
+        return False
 
 def check_dependency(name: str):
     if name in sys.modules:
@@ -188,7 +205,7 @@ def savetmp(function: Callable):
 
 def funtmpdir(function : Callable, mkdir=False):
     tmp = tempfile.gettempdir()
-    tmp = Path(tmp).joinpath("eupol", function.__name__)
+    tmp = Path(tmp).joinpath("eupol", function.__qualname__)
     if os.path.exists(tmp):
         return str(tmp)
     else:
@@ -200,17 +217,31 @@ def funtmpdir(function : Callable, mkdir=False):
 
 def tmpcache(function: Callable) -> Callable:
     directory = funtmpdir(function, mkdir=True)
+    
     @wraps(function)
     def wrapper(*args, **kwargs):
+        # if class method is called, ignore self
+        if '.' in function.__qualname__:
+            _args = args[1:]
+        else:
+            _args = args
+        
         # unless explicitly specified, use the temp directory to cache the result
         cache = False if 'cache' in kwargs and not kwargs['cache'] else True
         if cache:
-            fvalsname = Path(directory).joinpath(human_readable(*args, **kwargs))
+            fvalsname = Path(directory).joinpath(human_readable(*_args, **kwargs))
 
             if fvalsname.with_suffix(".json.gz").exists():
                 rlog(f"> 📁✅ found {fvalsname} in cache", style="green")
                 fvalspath = str(fvalsname.with_suffix(".json.gz"))
-                result = from_gzip_json(fvalspath).get('result')
+                stored = from_gzip_json(fvalspath)
+                if modname := stored['json_support']["module"]:
+                    mod = imp.import_module(modname) if modname != "json" else json
+                    if funcname := stored['json_support']["loader"]:
+                        jsloader = getattr(mod, funcname)
+                        result = jsloader(stored['result'])
+                else:
+                    result = stored['result']
                 return result
 
             elif fvalsname.with_suffix(".pkl.gz").exists():
@@ -221,14 +252,25 @@ def tmpcache(function: Callable) -> Callable:
             else:
                 rlog(f"> 📁 ⦰ arguments not found in cache", style="purple")
                 rlog(f"> ƒ() computing function output ...", style="blue")
+                # give class instance in call
                 result = function(*args, **kwargs)
                 if (jsupp := json_support(result)):
                     result_module, jsloader = jsupp
+                if jsupp:
+                    if hasattr(result, 'to_json'):
+                        serialized_result = result.to_json()
+                    elif hasattr(result, 'to_dict'):
+                        serialized_result = result.to_dict()
+                    elif hasattr(result, 'json'):
+                        serialized_result = result.json()
+                    else:
+                        serialized_result = json.dumps(result)
+
                 data = {
                     "function": function.__name__,
-                    'args': args,
+                    'args': _args,
                     'kwargs': kwargs,
-                    'result': result if not jsupp else result.to_json(),
+                    'result': serialized_result,
                     'json_support': {
                         'module': result_module.__name__ if jsupp else None,
                         'loader': jsloader if jsupp else None
@@ -237,8 +279,9 @@ def tmpcache(function: Callable) -> Callable:
                 rlog(f"> 📁⭳ saving result to {fvalsname}", style="blue")
                 try:
                     to_gzip_json(data, fvalsname) # if serializable
-                except TypeError:
-                    rlog(f"> 📁 ❌ {fvalsname} is not serializable", style="red")
+                except TypeError as err:
+                    rlog(f"> 📁 ❌ {fvalsname} is not serializable: {err}", style="red")
+                    rlog(data)
                     rlog(f"> 📁 ⭳⭳ saving result to {fvalsname} as pickle (fallback)", style="blue")
                     with gzip.open(fvalsname.with_suffix(".pkl.gz"), 'wb') as f:
                         pickle.dump(result, f)
