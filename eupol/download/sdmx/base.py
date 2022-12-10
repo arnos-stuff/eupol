@@ -2,9 +2,13 @@ import requests
 import json
 import xmltodict as xtd
 import pandas as pd
+import rich.progress as rprog
+from rich.progress_bar import ProgressBar
+
 from typing import Union, Optional, List, Dict, Any, Tuple, Callable
 
-from eupol.download.utils import tmpcache
+from eupol.download.utils import tmpcache, rmcache, rc
+from eupol.download.paths import data_dir
 
 def to_snake_case(funcname: str) -> str:
     uppercases = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -42,17 +46,22 @@ class sdmxBase:
     concepts = 's:Concepts'
     concept = 's:Concept'
     conceptscheme = 's:ConceptScheme'
-    description = 's:Description'
     code = 's:Code'
     parent = 's:ParentCode'
     level = 's:Level'
     dataflows = 's:Dataflows'
     dataflow = 's:Dataflow'
+    categorisations = 's:Categorisations'
+    categorisation = 's:Categorisation'
+    categoryschemes = "s:CategorySchemes"
+    categoryscheme = "s:CategoryScheme"
+    category = "s:Category"
     annotations = 'c:Annotations'
     annotation = 'c:Annotation'
     codelists = "s:Codelists"
     codelist = "s:Codelist"
     name = 'c:Name'
+    description = 'c:Description'
     lang = '@xml:lang'
     id = '@id'
     version = '@version'
@@ -104,7 +113,7 @@ class sdmxBase:
             return [sdmxBase.recurlang(o) for o in data]
         elif isinstance(data, dict):
             for k in data.keys():
-                if sdmxBase.name in k:
+                if sdmxBase.name in k or sdmxBase.description in k:
                     data[k] = sdmxBase.multilang(data[k])
                 else:
                     data[k] = sdmxBase.recurlang(data[k])
@@ -156,10 +165,42 @@ class ConceptScheme(sdmxBase):
         cls.asdict = sdmxBase.rclean(sdmxBase.recurlang(cls.data))
         return pd.DataFrame.from_records(cls.asdict)
 
-class DataFlow(sdmxBase): 
-    def parse(dxml):
+class DataFlow(sdmxBase):
+    def __new__(cls, agency_id: str = "ESTAT"):
+        cls.url = sdmxBase.structural_metadata_url(agency_id, "dataflow", stubs=True, all=True)
+        return cls
+    @classmethod
+    def parse(cls, dxml):
         return dxml[sdmxBase.structure][sdmxBase.structures][sdmxBase.dataflows][sdmxBase.dataflow]
+    @classmethod
+    @tmpcache
+    def download(cls, url: str = None):
+        if url is None:
+            cls.response = requests.get(cls.url)
+        else:
+            cls.response = requests.get(url)
+        cls.data = xtd.parse(cls.response.text)
+        return cls.data
+    @classmethod
+    def flows(cls, data: Union[str, Dict] = None):
+        if data is None:
+            if not hasattr(cls, 'data'):
+                cls.data = cls.parse(cls.download())
+            else:
+                cls.data = cls.parse(cls.data)
+        elif data.startswith("https://") or data.startswith("http://"):
+            cls.data = cls.parse(cls.download(data))
+        else:
+            cls.data = cls.parse(data)
 
+        cls.flows_aslist = sdmxBase.recurlang(cls.data)
+        cls.flows_aslist = sdmxBase.rclean(data=cls.flows_aslist)
+        return cls.flows_aslist
+
+    @classmethod
+    def df(cls, data: Union[str, Dict] = None):
+        flows = cls.flows(data)
+        return pd.DataFrame.from_records(flows)
 class Descendants(ConceptScheme):
     def __new__(cls, agency_id: str) -> str:
         cls.agency_id = agency_id
@@ -210,8 +251,8 @@ class Descendants(ConceptScheme):
 
         _codelist = dxml[sdmxBase.structure][sdmxBase.structures][sdmxBase.codelists][sdmxBase.codelist]
         _codelist = sdmxBase.rclean(sdmxBase.recurlang(_codelist))
-        cls.flatcodes = cls.flatcodes(_codelist)    
-        return cls.flatcodes
+        cls.codes_aslist = cls.flatcodes(_codelist)    
+        return cls.codes_aslist
     @classmethod
     def df(cls, data: Union[str, dict]):
         """Either a string equal to the scheme id or a dictionary of the parsed xml"""
@@ -219,14 +260,272 @@ class Descendants(ConceptScheme):
         df = pd.DataFrame.from_records(_codes)
         return df
 
+class Categorisation(sdmxBase):
+    def __new__(cls, agency_id: str = "ESTAT"):
+        cls.url = sdmxBase.structural_metadata_url(agency_id, "categorisation", stubs=False, all=True)
+        return cls
+
+    @classmethod
+    def flatten(cls, obj):
+        if isinstance(obj, (str, int, float)):
+            return obj
+        elif isinstance(obj, list):
+            return [cls.flatten(item) for item in obj]
+        elif isinstance(obj, dict):
+            flatobj = {}
+            for key, val in obj.items():
+                if isinstance(val, list):
+                    for i, item in enumerate(val):
+                        if not isinstance(item, dict):
+                            flatobj[key + '.i' + str(i)] = cls.flatten(item)
+                        else:
+                            for subkey, subval in cls.flatten(item).items():
+                                flatobj[key + '.i' + str(i) + '.' + subkey] = subval
+                elif not isinstance(val, dict):
+                    flatobj[key] = cls.flatten(val)
+                else:
+                    for subkey, subval in cls.flatten(val).items():
+                        flatobj[key + '.' + subkey] = subval
+            return flatobj
+    
+    @classmethod
+    def parse(cls, dxml):
+        cats = dxml[sdmxBase.structure][sdmxBase.structures][sdmxBase.categorisations]
+        cls.data = cats[sdmxBase.categorisation]
+        return cls.data
+    @classmethod
+    @tmpcache
+    def download(cls, url: str = None):
+        if url is None:
+            cls.response = requests.get(cls.url)
+        else:
+            cls.response = requests.get(url)
+        cls.data = xtd.parse(cls.response.text)
+        return cls.data
+    @classmethod
+    def categories(cls, data: Union[str, Dict] = None):
+        if data is None:
+            if not hasattr(cls, 'data'):
+                cls.data = cls.parse(cls.download())
+            else:
+                cls.data = cls.parse(cls.data)
+        elif data.startswith("https://") or data.startswith("http://"):
+            cls.data = cls.parse(cls.download(data))
+        else:
+            cls.data = cls.parse(data)
+
+        cls.categories_aslist = sdmxBase.recurlang(cls.data)
+        cls.categories_aslist = sdmxBase.rclean(data=cls.categories_aslist)
+        return cls.categories_aslist
+
+    @classmethod
+    def df(cls, data: Union[str, Dict] = None, annotations: bool = False):
+        cats = cls.categories(data)
+        cats = cls.flatten(cats)
+        df = pd.DataFrame.from_records(cats)
+        if not annotations:
+            df = df.drop(columns=[col for col in df.columns if ".annotations" in col])
+        return df
+
+class CategoryScheme(sdmxBase):
+    def __new__(cls, agency_id: str = "ESTAT"):
+        cls.url = sdmxBase.structural_metadata_url(agency_id, "categoryscheme", stubs=False, all=True)
+        return cls
+
+    @classmethod
+    def flatten(cls, obj):
+        if isinstance(obj, (str, int, float)):
+            return obj
+        elif isinstance(obj, list):
+            return [cls.flatten(item) for item in obj]
+        elif isinstance(obj, dict):
+            flatobj = {}
+            for key, val in obj.items():
+                if isinstance(val, list):
+                    for i, item in enumerate(val):
+                        if not isinstance(item, dict):
+                            flatobj[key + '.i' + str(i)] = cls.flatten(item)
+                        else:
+                            for subkey, subval in cls.flatten(item).items():
+                                flatobj[key + '.i' + str(i) + '.' + subkey] = subval
+                elif not isinstance(val, dict):
+                    flatobj[key] = cls.flatten(val)
+                else:
+                    for subkey, subval in cls.flatten(val).items():
+                        flatobj[key + '.' + subkey] = subval
+            return flatobj
+    
+    @classmethod
+    def parse(cls, dxml):
+        catschemes = dxml[sdmxBase.structure][sdmxBase.structures][sdmxBase.categoryschemes][sdmxBase.categoryscheme]
+        cls.data = catschemes
+        return cls.data
+    @classmethod
+    @tmpcache
+    def download(cls, url: str = None):
+        if url is None:
+            cls.response = requests.get(cls.url)
+        else:
+            cls.response = requests.get(url)
+        cls.data = xtd.parse(cls.response.text)
+        return cls.data
+
+    @classmethod
+    def flatcats(cls, categories: List[Dict], level: int = 0):
+        rows = []
+        prefix = "level" + str(level) + "." if level > 0 else ""
+        for cat in categories:
+            row = {}
+            if "id" in cat and "name" in cat:
+                row[prefix + "id"] = cat["id"]
+                row[prefix + "name"] = cat["name"]
+            if "category" in cat and isinstance(cat, dict):
+                subrows = cls.flatcats(cat["category"], level + 1)
+                for subrow in subrows:
+                    rows.append({**row, **subrow})
+            else:
+                rows.append(row)
+        return rows
+
+    @classmethod
+    def categoryschemes(cls, data: Union[str, Dict] = None):
+        if data is None:
+            if not hasattr(cls, 'data'):
+                cls.data = cls.parse(cls.download())
+            else:
+                cls.data = cls.parse(data)
+        elif data.startswith("https://") or data.startswith("http://"):
+            cls.data = cls.parse(cls.download(data))
+        else:
+            cls.data = cls.parse(data)
+
+        cls.categoryschemes_aslist = sdmxBase.recurlang(cls.data)
+        
+        cls.categoryschemes_aslist = sdmxBase.rclean(data=cls.categoryschemes_aslist)
+        cls.categoryschemes_aslist = cls.flatcats(cls.categoryschemes_aslist)
+        return cls.categoryschemes_aslist
+
+    @classmethod
+    def df(cls, data: Union[str, Dict] = None, annotations: bool = False):
+        catschemes = cls.categoryschemes(data)
+        # catschemes = cls.flatten(catschemes)
+        df = pd.DataFrame.from_records(catschemes)
+        return df
+
+class TableOfContents(sdmxBase):
+    def __new__(
+        cls,
+        dflows: pd.DataFrame,
+        dfcategories: pd.DataFrame,
+        dfcatschemes: pd.DataFrame
+        ):
+        
+        dfcatschemes['nested_id'] = dfcatschemes.apply(
+            func=lambda row : ".".join([
+                row[col]
+                    for col in dfcatschemes.columns if "id" in str(col) and isinstance(row[col],str)
+                    ]),
+                    axis=1
+                )
+
+        dfcatschemes.columns = ["category_scheme." + str(col) for col in dfcatschemes.columns]
+
+        categories = dfcategories[[
+            'source.ref.id', 'target.ref.id',
+            'target.ref.maintainable_parent_id',
+        ]].drop_duplicates().rename(columns={
+            'source.ref.id': 'dataflow.id',
+            'target.ref.id': 'category.id',
+            'target.ref.maintainable_parent_id': 'category.parent.id',
+        })
+
+
+        flows = dflows[["id", "name", "description"]].rename(columns={
+            "id": "dataflow.id",
+            "name": "dataflow.name",
+            "description": "dataflow.description",
+        })
+
+
+        toc = pd.merge(categories, flows, left_on="dataflow.id", right_on="dataflow.id")
+        toc["category.nested_id"] = toc["category.parent.id"] + "." + toc["category.id"]
+
+        toc = pd.merge(
+            dfcatschemes,
+            toc,
+            left_on="category_scheme.nested_id",
+            right_on="category.nested_id",
+        )
+
+        cls.df = toc
+        return cls
 
 class Model:
     def __new__(cls, agency_id: str, *args, **kwargs):
         cls.base = sdmxBase
         cls.concept = ConceptScheme(agency_id)
-        cls.dataflow = DataFlow
+        cls.dataflow = DataFlow(agency_id)
         cls.descendants = Descendants(agency_id)
+        cls.categories = Categorisation(agency_id)
+        cls.categoryscheme = CategoryScheme(agency_id)
+        cls.toc = None
 
         cls.agency_id = agency_id
         # store the agency_id in the class
         return cls
+    
+    @classmethod
+    @tmpcache
+    def init(cls):
+        progress = rprog.Progress(
+        rprog.SpinnerColumn(),
+        rprog.BarColumn(),
+        rprog.TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
+        rprog.TextColumn("Completed: {task.completed} / {task.total}"),
+        rprog.TextColumn("{task.description}"),
+        rprog.TimeElapsedColumn(),
+        console=rc,
+        )
+        with progress:
+            general = progress.add_task(f"> 🚀🚀 Initializing Metadata for agency {cls.agency_id}", total = 4)
+            flowtask = progress.add_task(description=f"[purple] >> ƒ() ⟶  Downloading DataFlow metadata from agency {cls.agency_id}", total=None)
+            dflows = cls.dataflow.df()
+            progress.update(flowtask, advance=100, description=f"[green] >> ✅ Done ! DataFlow metadata acquired.")
+            progress.update(general, advance=1)
+            catstask = progress.add_task(description=f"[purple] >> ƒ() ⟶ Downloading Categorisation metadata from agency {cls.agency_id}", total=None)
+            dfcategories = cls.categories.df()
+            progress.update(catstask, advance=100, description=f"[green] >> ✅ Done ! Categorisation metadata acquired.")
+            progress.update(general, advance=1)
+            catschemetask = progress.add_task(description=f"[purple] >> ƒ() ⟶  Downloading CategoryScheme metadata from agency {cls.agency_id}", total=None)
+            dfcatschemes = cls.categoryscheme.df()
+            progress.update(catschemetask, advance=100, description=f"[green] >> ✅ Done ! CategoryScheme metadata acquired.")
+            progress.update(general, advance=1)
+            toc = progress.add_task(description=f"[purple] >> ƒ() ⟶ Building Table of Contents from agency {cls.agency_id}", total=None)
+
+            cls.toc = TableOfContents(
+                dflows,
+                dfcategories,
+                dfcatschemes,
+            )
+            progress.update(toc, advance=100, description=f"[green] >> ✅ Done ! Table of Contents built.")
+            progress.update(general, advance=1)
+        return cls.toc.df
+
+    @classmethod
+    def rm_cache(cls):
+        rmcache(cls.dataflow.download)
+        rmcache(cls.categories.download)
+        rmcache(cls.categoryscheme.download)
+        rmcache(cls.concept.download)
+        rmcache(cls.descendants.download)
+        rmcache(cls.init)
+
+if __name__ == '__main__':
+    estat = Model("ESTAT")
+    # dfcats = estat.categories.df()
+    # dfscheme = estat.concept.df()
+    # dfflow = estat.dataflow.df()
+    # dfcatscheme = estat.categoryscheme.df()
+    estat.rm_cache()
+    estat.init()
+    print(estat.toc.df.head(100))

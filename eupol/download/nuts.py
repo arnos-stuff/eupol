@@ -75,6 +75,7 @@ def metadata(year, directory=None):
     return metadata
 
 def dl(year: str, scale: str, extension: str, directory: str = None):
+    """Download NUTS file."""
     if year not in years:
         raise ValueError(f"Year must be one of {years}")
     if scale not in scales:
@@ -95,6 +96,7 @@ def dl(year: str, scale: str, extension: str, directory: str = None):
     return fname
 
 def path(year: str, fmt: str, geom: str, scale:str, crs: str = "3857", level:str = None) -> str:
+    """Return path to NUTS file. If file does not exist, download it first."""
     if year not in years:
         raise ValueError(f"Year must be one of {years}")
     if fmt not in formats:

@@ -2,6 +2,7 @@ import requests
 import tempfile
 import warnings
 import inspect
+import shutil
 import pickle
 import json
 import gzip
@@ -163,7 +164,8 @@ def json_support(obj: Any) -> (str, Any):
 
 def to_gzip_json(data: Any, path: str):
     jsonfilename = str(path) + ".json.gz" if not path.name.endswith(".json.gz") else str(path)
-    with gzip.open(jsonfilename, 'wt', encoding='UTF-8') as zipfile:
+    os.makedirs(path.parent, exist_ok=True)
+    with gzip.open(jsonfilename, 'wt+', encoding='UTF-8') as zipfile:
         json.dump(data, zipfile)
 
 def from_gzip_json(path: str) -> Any:
@@ -276,7 +278,7 @@ def tmpcache(function: Callable) -> Callable:
                         'loader': jsloader if jsupp else None
                     }
                 }
-                rlog(f"> 📁⭳ saving result to {fvalsname}", style="blue")
+                rlog(f"> 📁 ⭳⭳ saving result to {fvalsname}", style="blue")
                 try:
                     to_gzip_json(data, fvalsname) # if serializable
                 except TypeError as err:
