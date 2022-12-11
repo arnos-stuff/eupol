@@ -27,7 +27,7 @@ rlog = rc.log
 def _hrdict(d: dict):
     fname = "@arg-dict="
     for k,v in d.items():
-        fname += f"@key-{arg}-@val-{v}"
+        fname += f"@key-{k}-@val-{v}"
     fname += "@dict-end"
     return fname
 

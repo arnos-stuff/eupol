@@ -466,6 +466,7 @@ class TableOfContents(sdmxBase):
         )
 
         cls.df = toc
+        cls.state = toc
         return cls
 
     @classmethod
@@ -487,8 +488,13 @@ class TableOfContents(sdmxBase):
             'category_scheme.level6.name' : "yellow",
             'dataflow.name' : "bold red",
         }
+        # if someone replaces the dots with underscores
+        styles = {
+            **styles,
+            **{key.replace(".", "_"):val for key,val in styles.items()}
+        }
 
-        toc = cls.toc if not table else table    
+        toc = cls.toc if table is None else table    
         tocnames = [col for col in toc.columns if "name" in col]
         # capture snapshot of current df through hash
         filename = "toc-snapshot-"
@@ -610,7 +616,7 @@ class Model:
         rmcache(cls.concept.download)
         rmcache(cls.descendants.download)
         rmcache(cls.init)
-
+    
 if __name__ == '__main__':
     estat = Model("ESTAT")
     # dfcats = estat.categories.df()

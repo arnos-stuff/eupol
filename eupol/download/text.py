@@ -23,7 +23,7 @@ def parse(title: str):
         )
     ptrn = ptrn[:-1]
     punct = r"[\,\.\!\?\;\:\-\(\)\[\]\{\}\'\"\&\%\$\#\@\*\+\=\/\\\|\<\>\~\`\^\_]"
-    parsed = re.sub(punct, '', title)
+    parsed = re.sub(punct, ' ', title)
     parsed = re.sub(ptrn, ' ', parsed)
     parsed = re.sub(r"(the)", "", parsed) # leftover the's
     return parsed.lower().replace('  ', ' ').strip()

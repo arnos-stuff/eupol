@@ -33,29 +33,24 @@ class DataSet(sdmxBase):
             key=kwargs
             )
 
-estat = Model("ESTAT")
-toc = estat.init()
+if __name__ == "__main__":    
+    estat = Model("ESTAT")
+    toc = estat.init()
+    sflows = toc.sample(5, random_state=42)
+    # rprint(sflows)
+    first = sflows.iloc[0]
+    # get the codelist for the first dataflow
+    rprint(first)
+    dataset = DataSet(estat).set(first['dataflow.id'])
+    rprint(dataset.tree())
+    # # Get the first dataflow
+    response = dataset.query.data(
+        first["dataflow.id"].lower(),
+        key={
+            # "FREQ": "A",
+            # "GEO": "EU27_2020",
+            })
 
-sflows = toc.sample(5, random_state=42)
-# rprint(sflows)
+    data = response.to_pandas()
 
-first = sflows.iloc[0]
-# get the codelist for the first dataflow
-rprint(first)
-
-dataset = DataSet(estat).set(first['dataflow.id'])
-
-rprint(dataset.tree())
-
-# # Get the first dataflow
-response = dataset.query.data(
-    first["dataflow.id"].lower(),
-    key={
-        # "FREQ": "A",
-        # "GEO": "EU27_2020",
-        })
-
-data = response.to_pandas()
-
-print(data)
-
+    print(data)
