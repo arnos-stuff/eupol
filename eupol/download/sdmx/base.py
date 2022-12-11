@@ -4,6 +4,7 @@ import pandas as pd
 import requests
 import tempfile
 import pickle
+import shutil
 import json
 import os
 
@@ -13,9 +14,7 @@ from hashlib import sha512 as sha
 from rich import print as rprint
 from rich.tree import Tree
 
-
-
-from eupol.download.utils import tmpcache, rmcache, rc, rlog
+from eupol.download.utils import tmpcache, rmcache, rc, rlog, download as dl
 from eupol.download.paths import data_dir
 
 def to_snake_case(funcname: str) -> str:
@@ -266,6 +265,7 @@ class Descendants(ConceptScheme):
         """Either a string equal to the scheme id or a dictionary of the parsed xml"""
         _codes = cls.codes(data)
         df = pd.DataFrame.from_records(_codes)
+        cls.codedf = df
         return df
 
 class Categorisation(sdmxBase):
@@ -530,6 +530,13 @@ class TableOfContents(sdmxBase):
         with open(filename, "wb+") as f:
             pickle.dump(cls.tree, f)
         return cls.tree
+    
+    @classmethod
+    def allcodes(cls):
+        bulk_url = "https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&file=dic%2Fall_dic.zip"
+        fname = dl(bulk_url)
+        shutil.unpack_archive(fname, fname.replace(".zip", ""))
+        return fname.replace(".zip", "")
 
 class Model:
     def __new__(cls, agency_id: str, *args, **kwargs):
@@ -612,4 +619,6 @@ if __name__ == '__main__':
     # dfcatscheme = estat.categoryscheme.df()
     # estat.rm_cache()
     estat.init()
-    print(estat.toc.head(100))
+    # estat.toc.to_csv(data_dir("eupol").joinpath("toc.csv"))
+    # print(estat.toc.head(100))
+    print(estat.ftoc.allcodes())
