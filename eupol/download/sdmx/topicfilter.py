@@ -61,7 +61,8 @@ def search_from_tmp_parquet(
 class TopicFilter:
     def __init__(self,
         model: Optional[Model],
-        agency_id: Optional[str] = None
+        agency_id: Optional[str] = None,
+        cache_dir: Optional[str] = None,
         ):
         if agency_id and not model:
             self.model = Model(agency_id)
@@ -80,6 +81,8 @@ class TopicFilter:
         self._old_state = None
         self._old_search = None
         self._old_search_cols = None
+        self.cache_dir = cache_dir
+
 
     def search(self,
         sentence: str,
@@ -94,7 +97,8 @@ class TopicFilter:
             colname_substring=colname_substring,
             raw=raw,
             literal_match_bonus=literal_match_bonus,
-            threshold_keep=threshold_keep
+            threshold_keep=threshold_keep,
+            rootdir=self.cache_dir,
             )
         if found is not None:
             self.curr_search = found
@@ -169,7 +173,8 @@ class TopicFilter:
             colname_substring=colname_substring,
             raw=raw,
             literal_match_bonus=literal_match_bonus,
-            threshold_keep=threshold_keep
+            threshold_keep=threshold_keep,
+            rootdir=self.cache_dir,
             )
         return keep
 
@@ -224,22 +229,11 @@ class TopicFilter:
             self.traverse(searches)
         return self
 
-    # def join_pars(self):
-    #     pass
-        
-    # def __repr__(self):
-    #     return self.state.__repr__()
-    # def __str__(self):
-    #     return self.state.__str__()
+    def __getitem__(self, key):
+        return self.state[key]
 
-    # def __getitem__(self, key):
-    #     return self.state[key]
-
-    # def __contains__(self, kw):
-    #     return len(
-    #         self.state[
-    #             self.state['title'].str.lower().str.contains(kw)
-    #             ])
+    def __contains__(self, item):
+        return len(self.search(item)) > 0
 
 
     # def load(self, max_tables: int = 10):
