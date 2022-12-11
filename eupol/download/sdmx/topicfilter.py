@@ -206,26 +206,23 @@ class TopicFilter:
         return str(self.state)
     def __rich__(self):
         return self.state_tree()
-    
-    # def relevant(self, n=5):
-    #     return self.kws.sort_values(by="count", ascending=False).head(n)
 
-    # def traverse(self, topics: List[str]):
-    #     self.__init__(topic=topics.pop(0))
-    #     for topic in topics:
-    #         self.filter(topic)
+    def traverse(self, sentences: List[str]):
+        self.__init__(self.model)
+        for st in sentences:
+            self = self.filter(st)
+        return self
     
-    # def backtrack(self, n=1):
-    #     if n == 1:
-    #         self.state = self._old_state
-    #         self.kws = self.old_kws
-    #         self.topics = self.topics[:-1]
-    #         self.set_attrs()
-    #     else:
-    #         topics = self.topics[:-n]
-    #         self.traverse(topics)
-    #         self.set_attrs()
-    #     return self
+    def backtrack(self, n=1):
+        if n == 1:
+            self.state = self._old_state
+            self.curr_search = self._old_search
+            self.curr_search_cols = self._old_search_cols
+            self.searches = self.searches[:-1]
+        else:
+            searches = self.searches[:-n]
+            self.traverse(searches)
+        return self
 
     # def join_pars(self):
     #     pass
@@ -270,10 +267,14 @@ if __name__ == "__main__":
     estat = Model("ESTAT")
     toc = estat.init()
     tf = TopicFilter(estat)
-    tfs1 = tf.filter("GDP").filter("sustainable").state
+    tfs1 = tf.filter("GDP").filter("sustainable")
     rprint(tfs1)
     tfs2 = tf.filter("GDP").filter("policy")
     rprint(tfs2)
+    tfs3 = tf.filter("GDP").filter("policy").filter("sustainable")
+    rprint(tfs3)
+    tfs3.backtrack(2)
+    rprint(tfs3)
     # for scol in tf.curr_search_cols:
     #     rprint(scol, search[[scol, "search."+scol]].sort_values(by="search."+scol, ascending=False).head(10))
     #     rprint(20*"-")
